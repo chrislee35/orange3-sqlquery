@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orange3-sqlquery"
+version = "0.0.4"
+description = "Simple widget to load a table from an SQL query against an SQLite3 database"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Chris Lee", email = "github@chrislee.dhs.org" },
+]
+keywords = ["orange3 add-on"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3 :: Only"
+]
+dependencies = [
+    "numpy >=1.26",
+    "Orange3 >=3.34.0",
+    "orange-canvas-core >=0.1.28",
+    "orange-widget-base >=4.20.0",
+    "duckdb >=1.2.2"
+]
+
+[license]
+license = "CC-BY-NC-SA-4.0"
+license-files = ["LICENSE"]
+
+[project.optional-dependencies]
+test = ["coverage"]
+doc = ["sphinx", "recommonmark", "sphinx_rtd_theme"]
+
+[project.urls]
+Homepage = "https://github.com/chrislee35/orange3-sqlquery"
+
+[tool.setuptools.packages.find]
+where = ["."]
+namespaces = true
+
+[tool.setuptools.package-data]
+"orangecontrib.sqlquery.widgets" = ["icons/*.svg"]
+
+[tool.setuptools.data-files]
+"help/orange3-sqlquery" = ["doc/_build/html/**/*"]
+
+[project.entry-points."orange.widgets"]
+sqlquery = "orangecontrib.sqlquery.widgets"
+
+[project.entry-points."orange3.addon"]
+orange3-sqlquery = "orangecontrib.sqlquery"
+
+[project.entry-points."orange.canvas.help"]
+html-index = "orangecontrib.sqlquery.widgets:WIDGET_HELP_PATH"
