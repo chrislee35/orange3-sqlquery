@@ -27,11 +27,13 @@ class SQLQueryWidget(widget.OWWidget):
     class Outputs:
         Output = widget.Output("Query Result", Table)
 
+    table_names = settings.Setting([""] * 10)
+    sql_query = settings.Setting("")
+
     def __init__(self):
         super().__init__()
 
         self.tables = [None] * 10
-        self.table_names = [""] * 10
 
         self._init_gui()
 
@@ -49,6 +51,13 @@ class SQLQueryWidget(widget.OWWidget):
             label = QLabel(f"Input {idx+1}: Not connected")
             edit = QLineEdit()
             edit.setPlaceholderText(f"Variable name for Input {idx+1}")
+
+            # Restore saved names
+            edit.setText(self.table_names[idx])
+
+            # When edited, update the stored name
+            edit.textChanged.connect(lambda text, index=idx: self.update_table_name(index, text))
+
             self.input_status_labels.append(label)
             self.input_name_edits.append(edit)
             row.addWidget(label)
@@ -64,6 +73,8 @@ class SQLQueryWidget(widget.OWWidget):
 
         self.sql_textbox = QTextEdit()
         self.sql_textbox.setPlaceholderText("Enter your SQL query here...")
+        self.sql_textbox.setText(self.sql_query)
+
         right_layout.addWidget(self.sql_textbox)
 
         self.execute_button = QPushButton("Execute Query")
@@ -72,6 +83,9 @@ class SQLQueryWidget(widget.OWWidget):
 
         self.right_widget.setLayout(right_layout)
         self.mainArea.layout().addWidget(self.right_widget)
+
+    def update_table_name(self, idx, text):
+        self.table_names[idx] = text
 
     # -- Handlers for each input port --
 
@@ -131,6 +145,12 @@ class SQLQueryWidget(widget.OWWidget):
         else:
             self.input_status_labels[idx].setText(f"Input {idx+1}: Not connected")
 
+        print(self.sql_query)
+        print(len([x for x in self.tables if x is not None]))
+        print(len([x for x in self.table_names if x != ""]))
+        if self.sql_query and len([x for x in self.tables if x is not None]) == len([x for x in self.table_names if x != ""]):
+            self.execute_query()
+
     def execute_query(self):
         con = duckdb.connect(database=':memory:')
         try:
@@ -145,6 +165,7 @@ class SQLQueryWidget(widget.OWWidget):
 
             # Execute user query
             query = self.sql_textbox.toPlainText()
+            self.sql_query = query
             result_df = con.execute(query).fetchdf()
 
             # Convert back to Orange Table
