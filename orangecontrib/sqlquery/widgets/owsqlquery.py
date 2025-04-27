@@ -145,9 +145,6 @@ class SQLQueryWidget(widget.OWWidget):
         else:
             self.input_status_labels[idx].setText(f"Input {idx+1}: Not connected")
 
-        print(self.sql_query)
-        print(len([x for x in self.tables if x is not None]))
-        print(len([x for x in self.table_names if x != ""]))
         if self.sql_query and len([x for x in self.tables if x is not None]) == len([x for x in self.table_names if x != ""]):
             self.execute_query()
 
