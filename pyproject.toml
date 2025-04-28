@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orange3-sqlquery"
-version = "0.0.2"
+version = "0.0.3"
 description = "Simple widget to load a table from an SQL query against an SQLite3 database"
 readme = "README.md"
 requires-python = ">=3.11"
