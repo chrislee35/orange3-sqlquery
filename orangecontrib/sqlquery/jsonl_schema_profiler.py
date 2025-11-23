@@ -22,11 +22,13 @@ API:
 from __future__ import annotations
 import sys
 import os
-import json
+import orjson
 import math
 import argparse
 from collections import Counter, defaultdict
 from typing import Any, Dict, Optional, Tuple, Iterable, Set, Generator
+import pandas as pd
+from fast_json_normalize import fast_json_normalize # this dropped the json normalization time by 21%
 
 # ------------------------
 # Utilities / running stats
@@ -217,6 +219,7 @@ class SchemaProfiler:
         self.enum_short_len = enum_short_len
         self.enum_unique_threshold = enum_unique_threshold
         self.enum_frequency_threshold = enum_frequency_threshold
+        self.dataframe: Optional[pd.DataFrame] = None
 
     def _get_field(self, path: str) -> FieldStats:
         if path not in self.fields:
@@ -348,6 +351,29 @@ class SchemaProfiler:
             else:
                 pass
 
+    def make_sparse_df(self, df):
+        sparse_df = pd.DataFrame()
+
+        for col in df.columns:
+            s = df[col]
+            
+            # Numeric
+            if pd.api.types.is_numeric_dtype(s):
+                fill = 0
+                sparse_df[col] = pd.arrays.SparseArray(s.fillna(fill), fill_value=fill)
+            
+            # Boolean
+            elif pd.api.types.is_bool_dtype(s):
+                fill = False
+                sparse_df[col] = pd.arrays.SparseArray(s.fillna(fill), fill_value=fill)
+            
+            # Strings / objects
+            else:
+                fill = None
+                sparse_df[col] = pd.arrays.SparseArray(s.where(s.notna(), fill), fill_value=fill)
+
+        return sparse_df
+
     def process_file(self, filename: str, encoding: str = "utf-8", errors: str = "strict") -> Generator[float, None, None]:
         """
         Stream a JSON Lines file (one JSON object per line).
@@ -355,6 +381,17 @@ class SchemaProfiler:
         """
         filesize = os.path.getsize(filename)
         processed = 0
+        # initialize a sparse dataframe
+        df = pd.DataFrame()
+        data = []
+        import time
+        timing = {
+            'json': 0.0,
+            'proc': 0.0,
+            'norm': 0.0,
+            'concat': 0.0,
+            'sparse': 0.0
+        }
         with open(filename, "r", encoding=encoding, errors=errors) as fh:
             for lineno, line in enumerate(fh, start=1):
                 processed += len(line)
@@ -363,12 +400,36 @@ class SchemaProfiler:
                 if not line:
                     continue
                 try:
-                    obj = json.loads(line)
+                    st = time.time()
+                    obj = orjson.loads(line)
+                    et = time.time()
+                    timing['json'] += et - st
+                    self.process_record(obj)
+                    st = time.time()
+                    timing['proc'] += st - et
+                    data.append(obj)
+                    if lineno % 50000 == 0:
+                        st = time.time()
+                        df = fast_json_normalize(data)
+                        et = time.time()
+                        timing['norm'] += et - st
+                        sdf = self.make_sparse_df(df)
+                        st = time.time()
+                        timing['sparse'] += st - et
+                        df = pd.concat([df, sdf], axis=0)
+                        et = time.time()
+                        timing['concat'] += et - st
+                        data = []
                 except Exception as e:
                     # Skip bad lines, but don't crash (print to stderr)
                     print(f"Warning: skip invalid JSON in {filename}:{lineno}: {e}", file=sys.stderr)
                     continue
-                self.process_record(obj)
+            if len(data) > 0:
+                df = pd.json_normalize(data)
+                sdf = self.make_sparse_df(df)
+                df = pd.concat([df, sdf], axis=0)
+        print(timing)
+        self.dataframe = df
 
     def process_files(self, filenames: Iterable[str]):
         for fn in filenames:

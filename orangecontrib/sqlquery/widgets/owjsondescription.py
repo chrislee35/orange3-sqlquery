@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pprint
+import pandas as pd
 from AnyQt.QtCore import Qt, QSize, QThread, pyqtSignal
 from AnyQt.QtWidgets import (
     QVBoxLayout, QPushButton, QListWidget, QListWidgetItem,
@@ -13,6 +14,8 @@ from Orange.widgets.widget import OWWidget, Input, Output
 from Orange.widgets.settings import Setting
 from Orange.widgets.utils.concurrent import ConcurrentWidgetMixin, Task
 from Orange.widgets import gui
+from Orange.data import Table
+from Orange.data.pandas_compat import table_from_frame
 
 from orangecontrib.sqlquery.jsonl_schema_profiler import SchemaProfiler
 
@@ -122,6 +125,7 @@ class FieldWidget(QWidget):
 class DescriptionWorker(QThread):
     progress = pyqtSignal(int)
     result = pyqtSignal(dict)
+    data = pyqtSignal(Table)
 
     def __init__(self, filename):
         super().__init__()
@@ -141,22 +145,25 @@ class DescriptionWorker(QThread):
                 break
 
         self.result.emit(profiler.report())
+        table = table_from_frame(profiler.dataframe)
+        profiler.dataframe = None
+        self.data.emit(table)
 
 # ----------------------------------------------------------------------
 # OWJSONDescription Widget
 # ----------------------------------------------------------------------
 
 class OWJSONDescription(OWWidget):
-    name = "JSON Description"
-    description = "Display a JSON/JSONL structure summary report"
-    icon = "icons/json.svg"  # provide your own icon
+    name = "JSON Lines Loader"
+    description = "Loadsa JSONL structure and provides a summary report"
+    icon = "icons/jsonl.svg"
     want_main_area = True
     want_control_area = False
 
     json_path = Setting("")
 
     class Outputs:
-        report = Output("Report", object)
+        data = Output("Table", Table)
 
     def __init__(self):
         OWWidget.__init__(self)
@@ -168,7 +175,7 @@ class OWJSONDescription(OWWidget):
         self.control_widget = QWidget()
         layout = QHBoxLayout()
         self.control_widget.setLayout(layout)
-        gui.button(self.control_widget, self, "Choose JSON File…",
+        gui.button(self.control_widget, self, "Choose JSON-Lines File…",
                    callback=self.choose_file)
 
         self.info_label = gui.label(self.control_widget, self, "No file loaded.")
@@ -186,6 +193,9 @@ class OWJSONDescription(OWWidget):
         self.mainArea.layout().addWidget(self.details)
 
         self.report = None
+
+        if self.json_path:
+            self._load_json(self.json_path)
 
     # ------------------------------------------------------------------
     # File loading
@@ -221,6 +231,7 @@ class OWJSONDescription(OWWidget):
         self.progressBarInit()
         self.worker = DescriptionWorker(filename)
         self.worker.result.connect(self.on_done)
+        self.worker.data.connect(self.table_callback)
         self.worker.progress.connect(self.progressBarSet)
         self.worker.start()
 
@@ -234,7 +245,10 @@ class OWJSONDescription(OWWidget):
         self.report = result
         self.info_label.setText("Loaded.")
         self.populate_list()
-        self.Outputs.report.send(result)
+
+    def table_callback(self, result):
+        self.Outputs.data.send(result)
+        self.progressBarFinished()
 
     def on_exception(self, task, exc):
         self.error(str(exc))

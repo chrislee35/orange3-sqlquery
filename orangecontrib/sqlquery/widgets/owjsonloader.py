@@ -2,23 +2,23 @@ from Orange.widgets import widget, settings
 from Orange.widgets.widget import Input, Output
 from Orange.widgets.utils import filedialogs
 from Orange.data.pandas_compat import table_from_frame, table_to_frame
+from  Orange.data import Table
 from AnyQt.QtWidgets import QFileDialog, QComboBox, QPushButton, QVBoxLayout, QWidget, QLabel, QLineEdit
 import duckdb
 import pandas as pd
-import Orange.data
 
 class OWDuckDBJSONLoader(widget.OWWidget):
     name = "JSON Loader"
-    description = "Opens a JSON file and converts to a table."
-    icon = "icons/DuckDB_logo.svg"
+    description = "Opens a JSON file and converts to a table using DuckDB."
+    icon = "icons/json.svg"
     priority = 10
     want_control_area = False
 
     class Outputs:
-        data = Output("Data", Orange.data.Table)
+        data = Output("Data", Table)
 
     # Settings (remembered between sessions)
-    db_file = settings.Setting("/home/chris/code/orange/dev/orange3-sqlquery/tests/inputs/test2.json")
+    db_file = settings.Setting("")
     selected_table = settings.Setting("file")
 
     def __init__(self):
@@ -43,6 +43,9 @@ class OWDuckDBJSONLoader(widget.OWWidget):
         self.column_query = QLineEdit("SELECT * FROM file")
         right_layout.addWidget(self.column_query)
 
+        query_btn = QPushButton("Query")
+        query_btn.clicked.connect(self.select_table)
+        right_layout.addWidget(query_btn)
 
         self.right_widget.setLayout(right_layout)
         self.mainArea.layout().addWidget(self.right_widget)
@@ -63,8 +66,8 @@ class OWDuckDBJSONLoader(widget.OWWidget):
     def load_tables(self):
         if self.conn:
             self.conn.close()
-
         try:
+            self.error("")
             self.conn = duckdb.connect(self.db_file)
             result = self.conn.execute("SHOW TABLES").fetchall()
             tables = [row[0] for row in result]
@@ -93,9 +96,9 @@ class OWDuckDBJSONLoader(widget.OWWidget):
             return
 
         try:
+            self.error("")
             query = self.column_query.text()
             df = self.conn.execute(query).fetchdf()
-            print(df)
             table = table_from_frame(df)
             self.Outputs.data.send(table)
             if self.tables_loaded:
